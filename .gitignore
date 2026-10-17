@@ -48,3 +48,4 @@ test-results/
 playwright-report/
 .next-build/
 .claude/
+.next-verify/

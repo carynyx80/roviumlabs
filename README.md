@@ -79,13 +79,16 @@ Vercel** (it is a long-running process) — deploy it separately (step 4), other
 1. **Create a PostgreSQL database** (Neon, Supabase, or Vercel Postgres). It must be UTF-8 (the default on all of
    these). Copy two connection strings: a *pooled* one for the web app and a direct one if your provider offers it.
 2. **Import the repo in Vercel** → New Project → `carynyx80/roviumlabs`. Framework: Next.js. Vercel automatically
-   runs the `vercel-build` script (`prisma generate && prisma migrate deploy && next build`), which applies database
-   migrations on every deploy.
+   runs `npm run vercel-build` (`scripts/vercel-build.mjs`): it prints a checklist of missing environment variables,
+   applies database migrations when a database is configured (using `DIRECT_URL` if set), and builds the app. The build
+   succeeds even before the variables are set — look for the `[rovium-build]` lines in the build log to see what is
+   missing. Leave Vercel's Build Command on its default (don't override it).
 3. **Set environment variables** (Project → Settings → Environment Variables):
 
    | Variable | Value |
    | --- | --- |
    | `DATABASE_URL` | pooled Postgres URL (Neon: add `?sslmode=require&pgbouncer=true`) |
+   | `DIRECT_URL` | non-pooled Postgres URL, used only to run migrations during the build (recommended with poolers) |
    | `SESSION_SECRET` | 48+ random characters (`openssl rand -base64 48`) |
    | `APP_URL`, `NEXT_PUBLIC_APP_URL` | your Vercel URL, e.g. `https://roviumlabs.vercel.app` |
    | `NEXT_PUBLIC_CHAINS` | `robinhood-testnet` (do **not** include `localhost` in production) |

@@ -21,7 +21,7 @@
     "chain:dev": "node scripts/dev-chain.mjs",
     "postinstall": "prisma generate",
     "e2e:journey": "tsx --conditions=react-server scripts/e2e-journey.ts",
-    "vercel-build": "prisma generate && prisma migrate deploy && next build"
+    "vercel-build": "node scripts/vercel-build.mjs"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.6.1",

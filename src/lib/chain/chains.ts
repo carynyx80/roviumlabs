@@ -82,7 +82,8 @@ const ALL: Record<ChainKey, ChainInfo> = {
  * switched on by accident.
  */
 export function enabledChains(): ChainInfo[] {
-  const raw = process.env.NEXT_PUBLIC_CHAINS || "localhost,robinhood-testnet";
+  // Production never defaults to the local dev chain.
+  const raw = process.env.NEXT_PUBLIC_CHAINS || (process.env.NODE_ENV === "production" ? "robinhood-testnet" : "localhost,robinhood-testnet");
   const mainnetAllowed = process.env.NEXT_PUBLIC_ENABLE_MAINNET === "true";
   const keys = raw
     .split(",")
