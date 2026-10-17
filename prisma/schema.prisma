@@ -1,0 +1,695 @@
+// RoviumPad database schema (PostgreSQL)
+// Conventions: cuid ids, createdAt/updatedAt on mutable rows, explicit indexes
+// for every foreign key and every column used for filtering/sorting.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────── Identity ───────────────────────────────
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id          String   @id @default(cuid())
+  displayName String?
+  role        UserRole @default(USER)
+  banned      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  wallets             WalletIdentity[]
+  sessions            Session[]
+  agents              Agent[]
+  drafts              AgentDraft[]
+  notifications       Notification[]
+  notificationChannels NotificationChannel[]
+  conversations       ChatConversation[]
+  usageRecords        UsageRecord[]
+  auditLogs           AuditLog[]         @relation("AuditActor")
+  agentReports        AgentAbuseReport[] @relation("Reporter")
+  tokenDeployments    TokenDeployment[]
+  media               Media[]
+}
+
+model WalletIdentity {
+  id         String   @id @default(cuid())
+  userId     String
+  address    String   @unique // lowercase 0x address
+  chainId    Int
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuthNonce {
+  id        String    @id @default(cuid())
+  nonce     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique // sha256 of the cookie token; raw token is never stored
+  address    String
+  chainId    Int
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────── Agents ───────────────────────────────
+
+enum RwaSpecialization {
+  GOLD
+  TREASURIES
+  REAL_ESTATE
+  PRIVATE_CREDIT
+  COMMODITIES
+  MULTI_ASSET
+}
+
+enum AgentStatus {
+  DRAFT // saved but never activated
+  ACTIVE // eligible for scheduled / triggered runs
+  PAUSED // creator paused
+  DISABLED // creator or admin disabled; no runs, hidden from marketplace when admin-disabled
+}
+
+enum AutonomyMode {
+  MANUAL
+  SCHEDULED
+  EVENT_TRIGGERED
+  CONTINUOUS
+}
+
+enum RiskSensitivity {
+  CONSERVATIVE
+  BALANCED
+  AGGRESSIVE
+}
+
+enum ReportingStyle {
+  CONCISE
+  DETAILED
+  INSTITUTIONAL
+}
+
+model Agent {
+  id             String            @id @default(cuid())
+  slug           String            @unique
+  ownerId        String
+  name           String
+  ticker         String
+  description    String
+  imageId        String?
+  specialization RwaSpecialization
+  objectives     String[]
+  status         AgentStatus       @default(DRAFT)
+  adminDisabled  Boolean           @default(false)
+  disabledReason String?
+  featured       Boolean           @default(false)
+  activatedAt    DateTime?
+  lastRunAt      DateTime?
+  lastSuccessAt  DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  owner          User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  image          Media?               @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  config         AgentConfig?
+  schedule       AgentSchedule?
+  executions     AgentExecution[]
+  memories       AgentMemory[]
+  reports        ResearchReport[]
+  monitoredAssets MonitoredAsset[]
+  tokenDeployments TokenDeployment[]
+  events         ActivityEvent[]
+  conversations  ChatConversation[]
+  usageRecords   UsageRecord[]
+  abuseReports   AgentAbuseReport[]
+  marketStats    AgentMarketStats?
+  jobs           Job[]
+
+  @@index([ownerId])
+  @@index([status, adminDisabled])
+  @@index([specialization])
+  @@index([createdAt])
+  @@index([lastSuccessAt])
+}
+
+model AgentConfig {
+  id                 String          @id @default(cuid())
+  agentId            String          @unique
+  researchObjectives String[]
+  dataSources        String[] // provider ids from the provider registry
+  customSourceUrls   String[] // creator-supplied https URLs, fetched through the SSRF-safe fetcher
+  riskSensitivity    RiskSensitivity @default(BALANCED)
+  reportingStyle     ReportingStyle  @default(DETAILED)
+  monitoringCriteria Json // { priceChangePct, yieldChangeBps, tvlChangePct, staleDataHours }
+  focusAssets        String[] // optional symbols / protocol slugs to focus on
+  maxToolCalls       Int             @default(12)
+  dailyRunLimit      Int             @default(6)
+  dailyTokenBudget   Int             @default(250000)
+  dailySpendLimitUsd Float           @default(0.25) // research + chat, estimated from token prices
+  version            Int             @default(1)
+  updatedAt          DateTime        @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model AgentSchedule {
+  id              String       @id @default(cuid())
+  agentId         String       @unique
+  mode            AutonomyMode @default(MANUAL)
+  intervalMinutes Int          @default(360) // scheduled research cadence
+  monitorMinutes  Int          @default(30) // event / continuous monitoring cadence
+  nextRunAt       DateTime?
+  nextMonitorAt   DateTime?
+  updatedAt       DateTime     @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([mode, nextRunAt])
+  @@index([mode, nextMonitorAt])
+}
+
+model AgentDraft {
+  id        String   @id @default(cuid())
+  ownerId   String
+  data      Json
+  step      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, updatedAt])
+}
+
+// ─────────────────────────────── Execution ───────────────────────────────
+
+enum ExecutionStatus {
+  QUEUED
+  RESEARCHING
+  ANALYZING
+  PUBLISHING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ExecutionTrigger {
+  MANUAL
+  SCHEDULED
+  EVENT
+}
+
+model AgentExecution {
+  id             String           @id @default(cuid())
+  agentId        String
+  status         ExecutionStatus  @default(QUEUED)
+  trigger        ExecutionTrigger
+  triggerReason  String?
+  idempotencyKey String           @unique
+  attempt        Int              @default(0)
+  cancelRequested Boolean         @default(false)
+  plan           Json?
+  summary        String?
+  error          String?
+  llmModel       String?
+  promptTokens   Int              @default(0)
+  completionTokens Int            @default(0)
+  toolCalls      Int              @default(0)
+  costUsd        Float            @default(0)
+  mode           String? // "ai" | "fallback"
+  fallbackReason String?
+  queuedAt       DateTime         @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+
+  agent  Agent                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  steps  AgentExecutionStep[]
+  report ResearchReport?
+
+  @@index([agentId, queuedAt])
+  @@index([status])
+}
+
+enum StepKind {
+  PLAN
+  TOOL_CALL
+  ANALYSIS
+  LLM_CALL
+  PUBLISH
+  MEMORY
+  ERROR
+}
+
+model AgentExecutionStep {
+  id          String   @id @default(cuid())
+  executionId String
+  index       Int
+  kind        StepKind
+  name        String
+  input       Json?
+  output      Json?
+  ok          Boolean  @default(true)
+  error       String?
+  durationMs  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  execution AgentExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@unique([executionId, index])
+}
+
+// Durable job queue (used when REDIS_URL is not configured; BullMQ is used otherwise).
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  type        String
+  agentId     String?
+  payload     Json
+  status      JobStatus @default(PENDING)
+  dedupeKey   String?   @unique
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  runAt       DateTime  @default(now())
+  lockedBy    String?
+  lockedUntil DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  agent Agent? @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAt])
+  @@index([agentId])
+}
+
+// ─────────────────────────────── Memory & research ───────────────────────────────
+
+enum MemoryKind {
+  REPORT_SUMMARY
+  FINDING
+  EXECUTION_SUMMARY
+  SOURCE_REFERENCE
+  OBJECTIVE
+  CONFIG_CHANGE
+  ASSET_SNAPSHOT
+}
+
+model AgentMemory {
+  id         String     @id @default(cuid())
+  agentId    String
+  kind       MemoryKind
+  content    String
+  data       Json?
+  importance Int        @default(1)
+  // Optional embedding for vector retrieval (stored as float array; cosine computed in app code).
+  embedding  Float[]
+  createdAt  DateTime   @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, kind, createdAt])
+}
+
+enum RiskLevel {
+  LOW
+  MODERATE
+  ELEVATED
+  HIGH
+}
+
+model ResearchReport {
+  id            String    @id @default(cuid())
+  agentId       String
+  executionId   String    @unique
+  title         String
+  summary       String
+  body          Json // structured sections, see src/lib/agents/schemas.ts
+  riskScore     Int // 0-100, higher = riskier
+  riskLevel     RiskLevel
+  confidence    Int // 0-100
+  methodology   String // scoring methodology version
+  narrativeBy   String // "llm:<model>" or "deterministic"
+  published     Boolean   @default(true)
+  hidden        Boolean   @default(false) // admin moderation
+  createdAt     DateTime  @default(now())
+
+  agent     Agent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  execution AgentExecution   @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  sources   ResearchSource[]
+  assets    ReportAsset[]
+
+  @@index([agentId, createdAt])
+  @@index([createdAt])
+}
+
+model ResearchSource {
+  id         String   @id @default(cuid())
+  reportId   String
+  providerId String
+  title      String
+  url        String
+  retrievedAt DateTime
+  dataTimestamp DateTime?
+  stale      Boolean  @default(false)
+
+  report ResearchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+model ReportAsset {
+  id        String    @id @default(cuid())
+  reportId  String
+  assetKey  String
+  name      String
+  category  String
+  facts     Json // normalized, verified facts with source attribution
+  riskScore Int
+  riskLevel RiskLevel
+  factors   Json // scoring factor breakdown
+
+  report ResearchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([assetKey])
+}
+
+model MonitoredAsset {
+  id           String   @id @default(cuid())
+  agentId      String
+  assetKey     String // provider-scoped key, e.g. "defillama:paxos-gold"
+  name         String
+  category     String
+  lastSnapshot Json?
+  lastCheckedAt DateTime?
+  createdAt    DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, assetKey])
+}
+
+model ProviderCache {
+  key       String   @id
+  value     Json
+  fetchedAt DateTime
+  expiresAt DateTime
+}
+
+model ProviderHealth {
+  providerId   String    @id
+  ok           Boolean
+  lastOkAt     DateTime?
+  lastErrorAt  DateTime?
+  lastError    String?
+  latencyMs    Int?
+  failureCount Int       @default(0)
+  updatedAt    DateTime  @updatedAt
+}
+
+// ─────────────────────────────── Tokens & chain ───────────────────────────────
+
+enum DeploymentStatus {
+  PREPARED // config validated, waiting for wallet signature
+  SUBMITTED // tx hash received from wallet, unconfirmed
+  CONFIRMED // receipt verified on-chain and contract state checked
+  FAILED
+}
+
+model TokenDeployment {
+  id             String           @id @default(cuid())
+  agentId        String
+  creatorId      String
+  mechanism      String // launch mechanism id, e.g. "standard-erc20"
+  chainId        Int
+  tokenName      String
+  tokenSymbol    String
+  totalSupply    String // decimal string, whole tokens
+  imageId        String?
+  status         DeploymentStatus @default(PREPARED)
+  contractAddress String?
+  txHash         String?          @unique
+  blockNumber    BigInt?
+  error          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  confirmedAt    DateTime?
+
+  agent        Agent                   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  creator      User                    @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  transactions BlockchainTransaction[]
+
+  @@index([agentId])
+  @@index([creatorId])
+  @@index([status])
+}
+
+model BlockchainTransaction {
+  id           String   @id @default(cuid())
+  deploymentId String?
+  chainId      Int
+  hash         String
+  from         String
+  to           String?
+  kind         String
+  status       String // pending | success | reverted
+  blockNumber  BigInt?
+  gasUsed      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  deployment TokenDeployment? @relation(fields: [deploymentId], references: [id], onDelete: SetNull)
+
+  @@unique([chainId, hash])
+  @@index([from])
+}
+
+// Derived marketplace metrics, recomputed by the worker. Formula documented in docs/ranking.md.
+model AgentMarketStats {
+  agentId          String   @id
+  runs7d           Int      @default(0)
+  successfulRuns7d Int      @default(0)
+  reports7d        Int      @default(0)
+  chats7d          Int      @default(0)
+  trendingScore    Float    @default(0)
+  updatedAt        DateTime @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([trendingScore])
+}
+
+// ─────────────────────────────── Activity & notifications ───────────────────────────────
+
+enum ActivityType {
+  AGENT_CREATED
+  AGENT_ACTIVATED
+  AGENT_PAUSED
+  AGENT_RESUMED
+  AGENT_DISABLED
+  RESEARCH_STARTED
+  RESEARCH_COMPLETED
+  RESEARCH_FAILED
+  REPORT_PUBLISHED
+  MONITOR_ALERT
+  TOKEN_SUBMITTED
+  TOKEN_CONFIRMED
+  TOKEN_FAILED
+}
+
+model ActivityEvent {
+  id        String       @id @default(cuid())
+  type      ActivityType
+  agentId   String?
+  actor     String? // wallet address or "worker"
+  message   String
+  data      Json?
+  createdAt DateTime     @default(now())
+
+  agent Agent? @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([agentId, createdAt])
+  @@index([type])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  kind      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+// Future external channels (email / telegram / webhook). Disabled until a user configures and verifies one.
+model NotificationChannel {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  target    String
+  enabled   Boolean  @default(false)
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────────────────────────── Chat ───────────────────────────────
+
+model ChatConversation {
+  id        String   @id @default(cuid())
+  agentId   String
+  userId    String?
+  visitorId String? // anonymous visitors are keyed by a signed cookie id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agent    Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user     User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messages ChatMessage[]
+
+  @@index([agentId])
+  @@index([userId])
+  @@index([visitorId])
+}
+
+model ChatMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String // user | assistant
+  content        String
+  citations      Json?
+  createdAt      DateTime @default(now())
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+// ─────────────────────────────── Platform ───────────────────────────────
+
+model UsageRecord {
+  id               String   @id @default(cuid())
+  userId           String?
+  agentId          String?
+  kind             String // llm_research | llm_chat | provider_call
+  model            String?
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  costUsd          Float    @default(0)
+  createdAt        DateTime @default(now())
+
+  user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  agent Agent? @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, createdAt])
+  @@index([userId, createdAt])
+  @@index([kind, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  target    String?
+  data      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorId])
+}
+
+model AgentAbuseReport {
+  id         String    @id @default(cuid())
+  agentId    String
+  reporterId String
+  reason     String
+  status     String    @default("OPEN") // OPEN | RESOLVED | DISMISSED
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  agent    Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  reporter User  @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@unique([agentId, reporterId])
+}
+
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+}
+
+model Media {
+  id        String   @id @default(cuid())
+  ownerId   String
+  mime      String
+  bytes     Bytes
+  width     Int
+  height    Int
+  sha256    String
+  createdAt DateTime @default(now())
+
+  owner  User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  agents Agent[]
+
+  @@index([ownerId])
+}
+
+model WorkerHeartbeat {
+  id         String   @id // worker instance id
+  driver     String // "postgres" | "bullmq"
+  startedAt  DateTime
+  lastBeatAt DateTime
+  jobsDone   Int      @default(0)
+  jobsFailed Int      @default(0)
+
+  @@index([lastBeatAt])
+}

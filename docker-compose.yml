@@ -1,0 +1,75 @@
+# Supporting services for local development and self-hosting.
+#   docker compose up -d postgres redis            # just the data services
+#   docker compose --profile worker up -d          # + the autonomous agent worker
+#   docker compose --profile full up -d            # + the web app (production build)
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: rovium
+      POSTGRES_PASSWORD: rovium
+      POSTGRES_DB: roviumpad
+    ports: ["5433:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rovium -d roviumpad"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    profiles: [worker, full]
+    build: { context: ., dockerfile: Dockerfile.worker }
+    command: ["npx", "prisma", "migrate", "deploy"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rovium:rovium@postgres:5432/roviumpad?schema=public
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  worker:
+    profiles: [worker, full]
+    build: { context: ., dockerfile: Dockerfile.worker }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rovium:rovium@postgres:5432/roviumpad?schema=public
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    profiles: [full]
+    build: { context: ., dockerfile: Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rovium:rovium@postgres:5432/roviumpad?schema=public
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    ports: ["3000:3000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
