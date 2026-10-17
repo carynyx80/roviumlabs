@@ -3,11 +3,14 @@ import { PUBLIC_AGENT_WHERE } from "@/lib/server/queries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Vercel caps function duration; the stream closes before the cap and EventSource reconnects.
+export const maxDuration = 60;
+const STREAM_MS = process.env.VERCEL ? 50_000 : 5 * 60_000;
 
 /**
  * Server-Sent Events stream of new platform events. The server polls PostgreSQL every
  * 3 seconds for rows newer than the last delivered one and pushes them to the client.
- * Streams close after 5 minutes; EventSource reconnects automatically with Last-Event-ID.
+ * Streams close after 5 minutes (50 s on Vercel); EventSource reconnects automatically with Last-Event-ID.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -32,7 +35,7 @@ export async function GET(req: Request) {
       };
       send("retry: 5000\n\n");
       const started = Date.now();
-      while (!closed && Date.now() - started < 5 * 60_000) {
+      while (!closed && Date.now() - started < STREAM_MS) {
         try {
           const rows = await db.activityEvent.findMany({
             where: {

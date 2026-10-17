@@ -71,6 +71,36 @@ The journey script signs in with Hardhat's publicly known test account #0 (local
 agent, waits for the worker to publish a report from live data, checks the public profile and marketplace,
 pauses/resumes, verifies authorization, deploys the token on the local chain and waits for server-side verification.
 
+## Deploy on Vercel
+
+The web app deploys to Vercel straight from this repository. **The autonomous agent worker cannot run on
+Vercel** (it is a long-running process) — deploy it separately (step 4), otherwise agents never research.
+
+1. **Create a PostgreSQL database** (Neon, Supabase, or Vercel Postgres). It must be UTF-8 (the default on all of
+   these). Copy two connection strings: a *pooled* one for the web app and a direct one if your provider offers it.
+2. **Import the repo in Vercel** → New Project → `carynyx80/roviumlabs`. Framework: Next.js. Vercel automatically
+   runs the `vercel-build` script (`prisma generate && prisma migrate deploy && next build`), which applies database
+   migrations on every deploy.
+3. **Set environment variables** (Project → Settings → Environment Variables):
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | pooled Postgres URL (Neon: add `?sslmode=require&pgbouncer=true`) |
+   | `SESSION_SECRET` | 48+ random characters (`openssl rand -base64 48`) |
+   | `APP_URL`, `NEXT_PUBLIC_APP_URL` | your Vercel URL, e.g. `https://roviumlabs.vercel.app` |
+   | `NEXT_PUBLIC_CHAINS` | `robinhood-testnet` (do **not** include `localhost` in production) |
+   | `RPC_URL_ROBINHOOD_TESTNET` | provider RPC (e.g. Alchemy) — recommended, public RPC is rate-limited |
+   | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_SUPPORTS_JSON_SCHEMA` | e.g. `https://api.openai.com/v1`, your key, `gpt-4.1-mini`, `true` |
+   | `ADMIN_WALLETS` | your wallet address (gets the admin console) |
+   | `REDIS_URL` | optional (Upstash); without it the queue uses PostgreSQL |
+
+   Everything else has safe defaults (see `.env.example`). Never put secrets in `NEXT_PUBLIC_*` variables.
+4. **Deploy the worker** on a host that runs persistent processes — Railway, Render (Background Worker), or Fly.io —
+   using `Dockerfile.worker` from this repo, with the **same** `DATABASE_URL` (direct connection), `LLM_*`,
+   `REDIS_URL` (if used) and `SESSION_SECRET`. Health check: `GET :8081/healthz`. Confirm it is connected:
+   `https://<your-app>/api/health` should show `"workersOnline": 1`.
+5. Open the site, connect a wallet on Robinhood Chain Testnet, and create an agent.
+
 ## Routes
 
 Public: `/`, `/explore`, `/activity`, `/docs`, `/agents/[slug]` (overview), `/agents/[slug]/research`,
