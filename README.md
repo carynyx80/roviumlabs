@@ -101,7 +101,8 @@ Vercel** (it is a long-running process) — deploy it separately (step 4), other
 
    Everything else has safe defaults (see `.env.example`). Never put secrets in `NEXT_PUBLIC_*` variables.
 4. **Deploy the worker** on a host that runs persistent processes — Railway, Render (Background Worker), or Fly.io —
-   using `Dockerfile.worker` from this repo, with the **same** `DATABASE_URL` (direct connection), `LLM_*`,
+   using `Dockerfile.worker` from this repo (on Railway set the service variable `RAILWAY_DOCKERFILE_PATH=Dockerfile.worker`,
+   otherwise it builds the web `Dockerfile`), with the **same** `DATABASE_URL` (direct connection), `LLM_*`,
    `REDIS_URL` (if used) and `SESSION_SECRET`. Health check: `GET :8081/healthz`. Confirm it is connected:
    `https://<your-app>/api/health` should show `"workersOnline": 1`.
 5. Open the site and check `/status`: Robinhood Chain mainnet should show a live block and a passing token-deployment dry run.
