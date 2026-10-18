@@ -1,0 +1,14 @@
+# Never upload secrets, local databases or build output to Railway.
+.env
+.env.*
+!.env.example
+.data/
+.hardhat/
+.next/
+.next-build/
+.next-verify/
+node_modules/
+coverage/
+test-results/
+playwright-report/
+.claude/
