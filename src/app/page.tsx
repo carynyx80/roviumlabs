@@ -26,6 +26,7 @@ import { Faq } from "@/components/landing/faq";
 import { db } from "@/lib/db";
 import { agentCardSelect, listMarketplace, platformActivityStats, PUBLIC_AGENT_WHERE, recentActivity } from "@/lib/server/queries";
 import { TRENDING_FORMULA } from "@/lib/agents/stats";
+import { enabledChains } from "@/lib/chain/chains";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,7 @@ const FEATURES = [
 
 export default async function HomePage() {
   const data = await loadHome();
+  const mainnetLive = enabledChains().some((c) => !c.isTestnet);
 
   return (
     <div>
@@ -92,9 +94,20 @@ export default async function HomePage() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-bg" aria-hidden />
         <div className="relative mx-auto max-w-7xl px-4 pb-24 pt-20 sm:px-6 sm:pt-28 lg:pb-32">
           <div className="max-w-2xl animate-fade-in">
-            <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-bg-2/70 px-3 py-1 text-[12px] text-silver backdrop-blur">
-              <span className="size-1.5 rounded-full bg-accent" /> Built for Robinhood Chain
-            </p>
+            <Link
+              href="/status"
+              className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-bg-2/70 px-3 py-1 text-[12px] text-silver backdrop-blur hover:border-border-strong"
+            >
+              {mainnetLive ? (
+                <>
+                  <span className="size-1.5 animate-pulse-soft rounded-full bg-success" /> Live on Robinhood Chain mainnet
+                </>
+              ) : (
+                <>
+                  <span className="size-1.5 rounded-full bg-accent" /> Built for Robinhood Chain
+                </>
+              )}
+            </Link>
             <h1 className="font-display text-[40px] font-semibold leading-[1.05] tracking-tight sm:text-[56px]">
               <span className="text-metal">The Launchpad for</span>
               <br />

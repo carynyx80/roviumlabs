@@ -6,7 +6,7 @@ import { tokenLaunchSchema } from "@/lib/agents/validation";
 import { TOKEN_UTILITY_DISCLOSURE } from "@/lib/agents/constants";
 import { recordEvent, notify } from "@/lib/agents/events";
 import { requireOwnedAgent } from "@/lib/server/agents";
-import { chainById } from "@/lib/chain/chains";
+import { chainById, isMainnet } from "@/lib/chain/chains";
 import { enabledMechanism } from "@/lib/chain/mechanisms";
 import { publicClientFor } from "@/lib/chain/server";
 import { verifyDeployment } from "@/lib/chain/verify";
@@ -47,6 +47,9 @@ export const POST = route<Ctx>(async (req, ctx) => {
     if (agent.status === "DRAFT") throw badRequest("Activate the agent before launching its token");
     const chain = chainById(input.chainId);
     if (!chain) throw badRequest("This network is not enabled for token launches");
+    if (isMainnet(input.chainId) && input.acknowledgeMainnet !== true) {
+      throw badRequest("Mainnet launches spend real ETH and cannot be undone. Confirm the mainnet acknowledgement to continue.");
+    }
     // The wallet may switch networks after sign-in; verification only requires the deploying address to match.
     const existing = await db.tokenDeployment.findMany({ where: { agentId: id, status: { in: ["CONFIRMED", "SUBMITTED", "PREPARED"] } } });
     if (existing.some((d) => d.status === "CONFIRMED")) throw conflict("This agent already has a verified token");

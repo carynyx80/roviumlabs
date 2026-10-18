@@ -8,6 +8,7 @@ const groups = [
       { href: "/explore", label: "Explore agents" },
       { href: "/create", label: "Create an agent" },
       { href: "/activity", label: "Live activity" },
+      { href: "/status", label: "Network status" },
       { href: "/dashboard", label: "Creator dashboard" },
     ],
   },

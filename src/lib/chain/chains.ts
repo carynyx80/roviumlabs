@@ -76,22 +76,35 @@ const ALL: Record<ChainKey, ChainInfo> = {
   },
 };
 
+/** Default networks when NEXT_PUBLIC_CHAINS is not set. Production is live on Robinhood Chain mainnet. */
+export const DEFAULT_PRODUCTION_CHAINS = "robinhood-mainnet,robinhood-testnet";
+export const DEFAULT_DEVELOPMENT_CHAINS = "localhost,robinhood-testnet";
+
 /**
- * Enabled chains are controlled by NEXT_PUBLIC_CHAINS (comma separated keys).
- * Mainnet additionally requires NEXT_PUBLIC_ENABLE_MAINNET=true so it can never be
- * switched on by accident.
+ * Enabled chains are controlled by NEXT_PUBLIC_CHAINS (comma separated keys, first = primary).
+ * Production defaults to Robinhood Chain mainnet + testnet; development to a local chain + testnet.
+ * NEXT_PUBLIC_ENABLE_MAINNET=false is a kill switch that removes mainnet everywhere (UI, sign-in,
+ * token launches) without touching NEXT_PUBLIC_CHAINS.
  */
 export function enabledChains(): ChainInfo[] {
-  // Production never defaults to the local dev chain.
-  const raw = process.env.NEXT_PUBLIC_CHAINS || (process.env.NODE_ENV === "production" ? "robinhood-testnet" : "localhost,robinhood-testnet");
-  const mainnetAllowed = process.env.NEXT_PUBLIC_ENABLE_MAINNET === "true";
-  const keys = raw
-    .split(",")
-    .map((k) => k.trim())
-    .filter((k): k is ChainKey => k in ALL)
-    .filter((k) => k !== "robinhood-mainnet" || mainnetAllowed);
-  return keys.length ? keys.map((k) => ALL[k]) : [ALL.localhost];
+  const raw =
+    process.env.NEXT_PUBLIC_CHAINS || (process.env.NODE_ENV === "production" ? DEFAULT_PRODUCTION_CHAINS : DEFAULT_DEVELOPMENT_CHAINS);
+  const mainnetAllowed = process.env.NEXT_PUBLIC_ENABLE_MAINNET !== "false";
+  const keys = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((k) => k.trim())
+        .filter((k): k is ChainKey => k in ALL)
+        .filter((k) => k !== "robinhood-mainnet" || mainnetAllowed),
+    ),
+  ];
+  if (keys.length) return keys.map((k) => ALL[k]);
+  return process.env.NODE_ENV === "production" ? [ALL["robinhood-testnet"]] : [ALL.localhost];
 }
+
+/** True for networks where transactions spend real funds. */
+export const isMainnet = (chainId: number) => anyChainById(chainId)?.isTestnet === false;
 
 export function chainById(id: number): ChainInfo | undefined {
   return enabledChains().find((c) => c.chain.id === id);

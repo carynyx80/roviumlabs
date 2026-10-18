@@ -41,7 +41,9 @@ export function TokenPanel({ agent, chains }: { agent: AgentRecord; chains: Chai
   const { address, isConnected } = useAccount();
   const walletChain = useChainId();
   const { switchChainAsync } = useSwitchChain();
-  const [chainId, setChainId] = useState<number>(chains.find((c) => c.isTestnet && c.id !== 31337)?.id ?? chains[0]!.id);
+  // Primary network first: Robinhood Chain mainnet when it is enabled on this deployment.
+  const [chainId, setChainId] = useState<number>(chains.find((c) => !c.isTestnet)?.id ?? chains.find((c) => c.isTestnet && c.id !== 31337)?.id ?? chains[0]!.id);
+  const [ackMainnet, setAckMainnet] = useState(false);
   const publicClient = usePublicClient({ chainId });
   const { data: walletClient } = useWalletClient({ chainId });
 
@@ -104,7 +106,8 @@ export function TokenPanel({ agent, chains }: { agent: AgentRecord; chains: Chai
     };
   }, [phase, activeDeployment, agent.id, qc]);
 
-  const formValid = name.trim().length >= 3 && /^[A-Z0-9]{2,10}$/.test(symbol) && /^[1-9]\d{0,14}$/.test(supply) && ack;
+  const onMainnet = chains.find((c) => c.id === chainId)?.isTestnet === false;
+  const formValid = name.trim().length >= 3 && /^[A-Z0-9]{2,10}$/.test(symbol) && /^[1-9]\d{0,14}$/.test(supply) && ack && (!onMainnet || ackMainnet);
   const walletMatches = isConnected && address?.toLowerCase() === user?.address;
   const args = [name.trim(), symbol, BigInt(supply || "0"), (user?.address ?? "0x0000000000000000000000000000000000000000") as `0x${string}`, agent.id, `${typeof window !== "undefined" ? window.location.origin : ""}/agents/${agent.slug}`] as const;
 
@@ -132,7 +135,7 @@ export function TokenPanel({ agent, chains }: { agent: AgentRecord; chains: Chai
     try {
       const prep = await api<{ deploymentId: string; constructorArgs: { name: string; symbol: string; totalSupplyWholeTokens: string; creator: `0x${string}`; agentId: string; metadataURI: string } }>(
         `/api/agents/${agent.id}/token`,
-        { method: "POST", body: { action: "prepare", mechanism: "standard-erc20", chainId, tokenName: name.trim(), tokenSymbol: symbol, totalSupply: supply, acknowledgeDisclosure: true } },
+        { method: "POST", body: { action: "prepare", mechanism: "standard-erc20", chainId, tokenName: name.trim(), tokenSymbol: symbol, totalSupply: supply, acknowledgeDisclosure: true, acknowledgeMainnet: onMainnet ? ackMainnet : undefined } },
       );
       deploymentId = prep.deploymentId;
       const a = prep.constructorArgs;
@@ -241,15 +244,24 @@ export function TokenPanel({ agent, chains }: { agent: AgentRecord; chains: Chai
                 </Field>
               </div>
               <Field label="Network" htmlFor="t-net">
-                <Select id="t-net" value={chainId} onChange={(e) => setChainId(Number(e.target.value))} disabled={phase !== "form"}>
+                <Select id="t-net" value={chainId} onChange={(e) => { setChainId(Number(e.target.value)); setAckMainnet(false); }} disabled={phase !== "form"}>
                   {chains.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.label}
-                      {c.isTestnet ? " (test network)" : ""}
+                      {c.isTestnet ? " (test network)" : " — mainnet, real ETH"}
                     </option>
                   ))}
                 </Select>
               </Field>
+              {onMainnet && (
+                <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-danger/40 bg-danger/[0.05] p-4 text-[13px] text-silver">
+                  <input type="checkbox" checked={ackMainnet} onChange={(e) => setAckMainnet(e.target.checked)} className="mt-0.5 size-4 accent-[#ff7a85]" disabled={phase !== "form"} />
+                  <span>
+                    <span className="font-medium text-danger">Robinhood Chain mainnet.</span> This deploys a real token using real ETH from your wallet
+                    for gas. It is permanent and cannot be undone or deleted. The contract has not been independently audited.
+                  </span>
+                </label>
+              )}
               <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-warning/30 bg-warning/[0.04] p-4 text-[13px] text-silver">
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 size-4 accent-[#83b5ff]" disabled={phase !== "form"} />
                 <span>{TOKEN_UTILITY_DISCLOSURE} I understand and accept this.</span>

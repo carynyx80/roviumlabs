@@ -49,10 +49,13 @@ Values from https://docs.robinhood.com/chain/connecting:
 | Robinhood Chain Testnet | 46630 | https://rpc.testnet.chain.robinhood.com | https://explorer.testnet.chain.robinhood.com |
 | Robinhood Chain | 4663 | https://rpc.mainnet.chain.robinhood.com | https://robinhoodchain.blockscout.com |
 
-Public RPCs are rate-limited; set `RPC_URL_ROBINHOOD_*` (server) to a provider URL with a key. Recommended rollout:
-`localhost` → `robinhood-testnet` (deploy and verify a token with a funded testnet wallet) → mainnet only after a
-contract audit, by setting `NEXT_PUBLIC_CHAINS=robinhood-testnet,robinhood-mainnet` **and**
-`NEXT_PUBLIC_ENABLE_MAINNET=true`.
+Public RPCs are rate-limited; set `RPC_URL_ROBINHOOD_*` (server) to a provider URL with a key.
+
+**Production runs on Robinhood Chain mainnet by default** (`NEXT_PUBLIC_CHAINS` unset → `robinhood-mainnet,robinhood-testnet`).
+Mainnet token launches show the estimated gas cost and require the creator to acknowledge that real ETH is spent and the
+deployment is permanent; the server rejects mainnet launches without that acknowledgement. `NEXT_PUBLIC_ENABLE_MAINNET=false`
+is a kill switch that removes mainnet everywhere. `/status` shows live block height, gas price and a dry-run deployment
+of the token contract for each enabled network. Token source verification: see `contracts/verification/README.md`.
 
 The token is deployed by the creator's wallet; the platform holds no keys and needs no deployer account.
 Recompile after editing the contract: `npm run contracts:compile` (writes `src/lib/chain/artifacts`).

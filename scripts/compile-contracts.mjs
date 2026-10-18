@@ -14,3 +14,14 @@ writeFileSync(
     `export const roviumAgentTokenBytecode = "${art.bytecode}" as const;\n`,
 );
 console.log("wrote src/lib/chain/artifacts/RoviumAgentToken.ts");
+
+// Standard JSON input for explorer verification (see contracts/verification/README.md).
+import { readdirSync } from "node:fs";
+for (const f of readdirSync(".hardhat/artifacts/build-info").filter((x) => x.endsWith(".json"))) {
+  const info = JSON.parse(readFileSync(`.hardhat/artifacts/build-info/${f}`, "utf8"));
+  if (info.input?.sources?.["contracts/RoviumAgentToken.sol"]) {
+    mkdirSync("contracts/verification", { recursive: true });
+    writeFileSync("contracts/verification/RoviumAgentToken.standard-input.json", JSON.stringify(info.input, null, 2));
+    console.log("wrote contracts/verification/RoviumAgentToken.standard-input.json");
+  }
+}

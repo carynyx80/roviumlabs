@@ -82,7 +82,7 @@ if (isRunning()) {
 }
 const enc = (() => {
   try {
-    return readFileSync(path.join(dataDir, "postgresql.conf"), "utf8").match(/^lc_ctype = .(S+)./m)?.[1] ?? "";
+    return readFileSync(path.join(dataDir, "postgresql.conf"), "utf8").match(/^lc_ctype = '([^']+)'/m)?.[1] ?? "";
   } catch {
     return "";
   }

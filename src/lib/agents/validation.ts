@@ -93,6 +93,8 @@ export const tokenLaunchSchema = z.object({
     .string()
     .trim()
     .regex(/^[1-9]\d{0,14}$/, "Whole number between 1 and 999,999,999,999,999"),
+  // Required by the server when the target network is a mainnet (real funds).
+  acknowledgeMainnet: z.boolean().optional(),
   acknowledgeDisclosure: z.literal(true, {
     errorMap: () => ({ message: "You must acknowledge the token disclosure" }),
   }),

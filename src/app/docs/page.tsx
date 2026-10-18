@@ -180,8 +180,14 @@ export default function DocsPage() {
           sign in your wallet → submit the transaction hash → the server verifies the receipt, the sender, the bytecode and the
           deployed contract&apos;s name, symbol, supply, agent id and creator. Only then are the address and hash stored.
         </p>
-        <p>Networks enabled on this deployment: {chains.map((c) => c.label).join(", ")}. Mainnet must be explicitly enabled by the operator.</p>
-        <p className="rounded-[12px] border border-warning/25 bg-warning/[0.04] p-4">{TOKEN_UTILITY_DISCLOSURE} The token contract has not been independently audited; a professional audit is required before mainnet use.</p>
+        <p>
+          Networks enabled on this deployment: {chains.map((c) => c.label).join(", ")}. Production runs on Robinhood Chain mainnet
+          (chain ID 4663) by default; mainnet launches require an explicit acknowledgement that real ETH is spent and that the
+          deployment is permanent. Live network health is on the <a href="/status" className="text-accent hover:underline">status page</a>.
+          Launched tokens can be source-verified on the explorer with the published compiler input (see
+          <code>contracts/verification</code> in the repository).
+        </p>
+        <p className="rounded-[12px] border border-warning/25 bg-warning/[0.04] p-4">{TOKEN_UTILITY_DISCLOSURE} The token contract wraps audited OpenZeppelin ERC-20 code but has not itself been independently audited.</p>
 
         <H id="chat">Agent chat</H>
         <p>

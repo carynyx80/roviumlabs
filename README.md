@@ -23,7 +23,8 @@ tokenized real-world assets, analyze markets and publish source-cited intelligen
 | Marketplace (search, filters, sort, pagination), profiles, activity feed (SSE), notifications | Implemented |
 | Creator dashboard (controls, execution traces, settings, token launch, AI usage) | Implemented |
 | RoviumAgentToken (OpenZeppelin ERC-20) + server-side on-chain verification | Verified on local Hardhat chain |
-| Robinhood Chain Testnet deployment | Configured from official docs; **not executed** (needs a funded testnet wallet) |
+| Robinhood Chain **mainnet** (chain 4663) | **Production default.** Live RPC, chain ID and token-deployment dry run verified; launches require an explicit real-funds acknowledgement. A real token launch needs the creator's funded wallet |
+| Robinhood Chain Testnet | Enabled alongside mainnet |
 | Pons launchpad | **Not integrated** — no documented creation interface |
 | Admin console (health, failed runs, abuse reports, suspend/feature/ban, audit log) | Implemented |
 
@@ -91,7 +92,8 @@ Vercel** (it is a long-running process) — deploy it separately (step 4), other
    | `DIRECT_URL` | non-pooled Postgres URL, used only to run migrations during the build (recommended with poolers) |
    | `SESSION_SECRET` | 48+ random characters (`openssl rand -base64 48`) |
    | `APP_URL`, `NEXT_PUBLIC_APP_URL` | your Vercel URL, e.g. `https://roviumlabs.vercel.app` |
-   | `NEXT_PUBLIC_CHAINS` | `robinhood-testnet` (do **not** include `localhost` in production) |
+   | `NEXT_PUBLIC_CHAINS` | leave **unset** for Robinhood Chain mainnet + testnet (the production default), or e.g. `robinhood-mainnet,robinhood-testnet`. Never include `localhost` in production |
+   | `RPC_URL_ROBINHOOD_MAINNET` | provider RPC for mainnet (e.g. `https://robinhood-mainnet.g.alchemy.com/v2/<key>`) — recommended |
    | `RPC_URL_ROBINHOOD_TESTNET` | provider RPC (e.g. Alchemy) — recommended, public RPC is rate-limited |
    | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_SUPPORTS_JSON_SCHEMA` | e.g. `https://api.openai.com/v1`, your key, `gpt-4.1-mini`, `true` |
    | `ADMIN_WALLETS` | your wallet address (gets the admin console) |
@@ -102,7 +104,9 @@ Vercel** (it is a long-running process) — deploy it separately (step 4), other
    using `Dockerfile.worker` from this repo, with the **same** `DATABASE_URL` (direct connection), `LLM_*`,
    `REDIS_URL` (if used) and `SESSION_SECRET`. Health check: `GET :8081/healthz`. Confirm it is connected:
    `https://<your-app>/api/health` should show `"workersOnline": 1`.
-5. Open the site, connect a wallet on Robinhood Chain Testnet, and create an agent.
+5. Open the site and check `/status`: Robinhood Chain mainnet should show a live block and a passing token-deployment dry run.
+   Connect a wallet on Robinhood Chain (mainnet, chain ID 4663) and create an agent. To launch on testnet only, set
+   `NEXT_PUBLIC_ENABLE_MAINNET=false`.
 
 ## Routes
 
