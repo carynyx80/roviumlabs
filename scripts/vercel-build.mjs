@@ -38,13 +38,16 @@ if (missing.length) line(`  -> Add the MISSING variables in Vercel â†’ Project â
 line("prisma generate");
 run("npx prisma generate");
 
-const migrateUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+// Direct (non-pooled) connection for migrations: our DIRECT_URL, or the names set by the
+// Vercel Neon integration / Vercel Postgres.
+const directName = ["DIRECT_URL", "DATABASE_URL_UNPOOLED", "POSTGRES_URL_NON_POOLING"].find((k) => process.env[k]);
+const migrateUrl = (directName && process.env[directName]) || process.env.DATABASE_URL;
 if (!migrateUrl) {
   line("Skipping database migrations: no DATABASE_URL configured.");
 } else if (process.env.SKIP_MIGRATIONS === "1") {
   line("Skipping database migrations: SKIP_MIGRATIONS=1.");
 } else {
-  line(`prisma migrate deploy (using ${process.env.DIRECT_URL ? "DIRECT_URL" : "DATABASE_URL"})`);
+  line(`prisma migrate deploy (using ${directName ?? "DATABASE_URL"})`);
   try {
     run("npx prisma migrate deploy", { ...process.env, DATABASE_URL: migrateUrl });
   } catch {
