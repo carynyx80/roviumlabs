@@ -54,7 +54,8 @@ const schema = z.object({
   MAX_ACTIVE_AGENTS_PER_USER: z.coerce.number().int().positive().default(10),
 
   WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
-  WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(8081),
+  // Hosts like Railway/Render assign PORT and health-check it; fall back to 8081 locally.
+  WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(Number(process.env.PORT) || 8081),
   EXECUTION_TIMEOUT_MS: z.coerce.number().int().positive().default(180000),
 });
 
