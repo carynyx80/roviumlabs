@@ -17,7 +17,6 @@ const schema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   SESSION_SECRET: z
     .string()
-    .min(32, "SESSION_SECRET must be at least 32 characters")
     .default("dev-only-insecure-session-secret-change-me-please"),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(72),
   ADMIN_WALLETS: z
@@ -70,14 +69,21 @@ export function env(): ServerEnv {
     const issues = parsed.error.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`).join("\n");
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
-  if (
-    parsed.data.NODE_ENV === "production" &&
-    parsed.data.SESSION_SECRET.startsWith("dev-only")
-  ) {
-    throw new Error("SESSION_SECRET must be set to a strong random value in production");
-  }
   cached = parsed.data;
   return cached;
+}
+
+/**
+ * The HMAC secret, validated where it is used (signed visitor cookies) rather than in env(),
+ * so a missing secret disables only the features that need it instead of every page.
+ */
+export function sessionSecret(): string {
+  const s = env().SESSION_SECRET;
+  if (s.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters");
+  if (env().NODE_ENV === "production" && s.startsWith("dev-only")) {
+    throw new Error("SESSION_SECRET must be set to a strong random value in production");
+  }
+  return s;
 }
 
 export function llmConfigured(): boolean {

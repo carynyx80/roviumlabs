@@ -1,11 +1,11 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { env } from "@/lib/env";
+import { sessionSecret } from "@/lib/env";
 
 const COOKIE = "rp_vid";
 
-const sign = (id: string) => createHmac("sha256", env().SESSION_SECRET).update(id).digest("base64url").slice(0, 22);
+const sign = (id: string) => createHmac("sha256", sessionSecret()).update(id).digest("base64url").slice(0, 22);
 
 /** Anonymous visitor id (HMAC-signed cookie) used to scope public chat history. */
 export async function visitorId(create: boolean): Promise<string | null> {
